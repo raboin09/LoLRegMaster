@@ -19,6 +19,9 @@ import java.util.Date;
 import java.time.Instant;
 import java.time.ZoneId;
 
+import java.sql.*;
+import java.util.Properties;
+
 import java.io.File;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -38,9 +41,8 @@ import org.w3c.dom.Node;
 public class Main {
 
     public static void main(String args[]) throws RiotApiException {
-        
-        getMatches();
 
+        getMatches();
     }
 
     public static String getChampName(String id) {
@@ -82,32 +84,89 @@ public class Main {
     }
 
     public static void getMatches() throws RiotApiException {
-        ApiConfig config = new ApiConfig().setKey("RGAPI-209eedb7-e302-439b-a950-4cd52deb1c1a");
-        RiotApi api = new RiotApi(config);
 
-        ChampionList champlist = api.getDataChampionList(Platform.NA);
+        System.out.println("Connecting to MySQL Server...");
+
+        try {
+            Class.forName("com.mysql.jdbc.Driver");
+        } catch (ClassNotFoundException e) {
+            System.out.println("JDBC Driver Missing!");
+            e.printStackTrace();
+            return;
+        }
+
+        Connection connection = null;
+
+        try {
+            connection = DriverManager.getConnection("jdbc:mysql://" + "loldbmysql.crhbfyx7fdgr.us-east-2.rds.amazonaws.com" + ":" + "3306/mysqlloldb", "remoteu", "password");
+        } catch (SQLException e) {
+            System.out.println("Connection Failed!:\n" + e.getMessage());
+        }
+
+        if (connection != null) {
+            System.out.println("Connection Successful!");
+        } else {
+            System.out.println("Failed to make connection!");
+        }
 
         try {
 
-            DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
+            DatabaseMetaData dbmd = connection.getMetaData();
 
-            // root elements
-            Document doc = docBuilder.newDocument();
-            Element rootElement = doc.createElement("Games");
-            doc.appendChild(rootElement);
-
-            /*for(String key : champlist.getData().keySet()){
-             Element champ = doc.createElement(key.toString());
-             rootElement.appendChild(champ);
-             champ.setAttribute("id", champlist.getData().get(key).toString().substring(champlist.getData().get(key).toString().indexOf("=") + 1, champlist.getData().get(key).toString().indexOf(":")));
-             }*/
+            String[] types = {"TABLE"};
+            ResultSet rs = dbmd.getTables(null, null, "%", types);
+            while (rs.next()) {
+                System.out.println(rs.getString("TABLE_NAME"));
+            }
             
+            
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        ApiConfig config = new ApiConfig().setKey("RGAPI-9805073b-be47-4009-840e-b369abbd865a");
+        RiotApi api = new RiotApi(config);
+
+        //ChampionList champlist = api.getDataChampionList(Platform.NA);
+
+        
+        
+        
+        
+        try {
+
             Summoner summoner = api.getSummonerByName(Platform.NA, "Canada Camera");
             MatchList matchList = api.getMatchListByAccountId(Platform.NA, summoner.getAccountId());
+            
+            String name = summoner.getName();
 
+            String sql = "INSERT INTO `Summoners` VALUES('" + summoner.getAccountId() + "', '" + name + "');";
+            
+            System.out.println(sql);
+                                           
+            Statement stmt = connection.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
+            
+            connection.setAutoCommit(false);
+            
+            stmt.addBatch(sql);
+            
+            ResultSet rs = stmt.executeQuery("SELECT * FROM `Summoners`;");
+            
+            rs.last();
+            
+            System.out.println("rows before batch execution= "+ rs.getRow());
+            
+            stmt.executeBatch();
+            connection.commit();
+            
+            System.out.println("Batch executed");
+            rs = stmt.executeQuery("select * from Summoners");
+            rs.last();
+            System.out.println("rows after batch execution = "+ rs.getRow());
+            
+            
             int check = 0;
-
+            
             if (matchList.getMatches() != null) {
                 for (MatchReference match : matchList.getMatches()) {
                     if (check < 40) {
@@ -120,80 +179,32 @@ public class Main {
 
                         Match thisMatch = api.getMatch(Platform.NA, match.getGameId());
                         String matchStr = String.valueOf(thisMatch.getGameId());
-
-                        Element matchElement = doc.createElement("Match");
-                        rootElement.appendChild(matchElement);
-
-                        Element winElement = doc.createElement("Result");
-                        matchElement.appendChild(winElement);
                         int id = thisMatch.getParticipantByAccountId(summoner.getAccountId()).getTeamId();
-                        winElement.setTextContent(thisMatch.getTeamByTeamId(id).getWin());
-
-                        Element champElement = doc.createElement("Champ");
-                        matchElement.appendChild(champElement);
-                        champElement.setTextContent(getChampName(String.valueOf(match.getChampion())));
-                                                
-                        Date expiry = new Date( thisMatch.getGameCreation() );
-                        Element dateElement = doc.createElement("Date");
-                        matchElement.appendChild(dateElement);
-                        dateElement.setTextContent(expiry.toString());
-                        
+                        Date expiry = new Date(thisMatch.getGameCreation());
                         String summonerFirstBloodKill = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstBloodKill());
                         String summonerFirstBloodAssist = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstBloodAssist());
                         String summonerFirstTowerKill = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstTowerKill());
                         String summonerFirstTowerAssist = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstTowerKill());
                         String teamFirstBlood = String.valueOf(thisMatch.getTeamByTeamId(id).isFirstBlood());
                         String teamFirstTower = String.valueOf(thisMatch.getTeamByTeamId(id).isFirstTower());
-                                               
-                        Element snowballElement = doc.createElement("Snowball");
-                        matchElement.appendChild(snowballElement);   
-                        
-                        Element summFbKill = doc.createElement("First_Blood_Kill");
-                        snowballElement.appendChild(summFbKill);
-                        summFbKill.setTextContent(summonerFirstBloodKill);
-                        
-                        Element summFbAssist = doc.createElement("First_Blood_Assist");
-                        snowballElement.appendChild(summFbAssist);
-                        summFbAssist.setTextContent(summonerFirstBloodAssist);
-                        
-                        Element summFtKill= doc.createElement("First_Tower_Kill");
-                        snowballElement.appendChild(summFtKill);
-                        summFtKill.setTextContent(summonerFirstTowerKill);
-                        
-                        Element summFtAssist = doc.createElement("First_Tower_Assist");
-                        snowballElement.appendChild(summFtAssist);
-                        summFtAssist.setTextContent(summonerFirstTowerAssist);
-                        
-                        Element teamFb = doc.createElement("Team_First_Blood");
-                        snowballElement.appendChild(teamFb);
-                        teamFb.setTextContent(teamFirstBlood);
-                        
-                        Element teamFt = doc.createElement("Team_First_Tower");
-                        snowballElement.appendChild(teamFt);
-                        teamFt.setTextContent(teamFirstTower);
-                        
+
                         check++;
-                        
+
                         System.out.println("Game id: " + thisMatch.getGameId() + " saved!");
                     }
                 }
             }
 
-            TransformerFactory transformerFactory = TransformerFactory.newInstance();
-            Transformer transformer = transformerFactory.newTransformer();
-            DOMSource source = new DOMSource(doc);
+            System.out.println("Record saved!");
             
-            StreamResult result = new StreamResult(new File("data\\sam.xml"));
-
-            transformer.transform(source, result);
-
-            System.out.println("File saved!");
-
-        } catch (ParserConfigurationException pce) {
-            pce.printStackTrace();
-        } catch (TransformerException tfe) {
-            tfe.printStackTrace();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
+
+    }
+
+    public static void dbConnect(String userName, String password, String url) {
+        
     }
 
 }
