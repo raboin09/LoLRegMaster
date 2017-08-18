@@ -19,6 +19,8 @@ import java.util.Date;
 import java.time.Instant;
 import java.time.ZoneId;
 
+import java.util.Scanner;
+
 import java.sql.*;
 import java.util.Properties;
 
@@ -83,8 +85,7 @@ public class Main {
         return champName;
     }
 
-    public static void getMatches() throws RiotApiException {
-
+    public static Connection dbConnect() {
         System.out.println("Connecting to MySQL Server...");
 
         try {
@@ -92,7 +93,6 @@ public class Main {
         } catch (ClassNotFoundException e) {
             System.out.println("JDBC Driver Missing!");
             e.printStackTrace();
-            return;
         }
 
         Connection connection = null;
@@ -109,67 +109,102 @@ public class Main {
             System.out.println("Failed to make connection!");
         }
 
+        return connection;
+    }
+
+    public static void getMatches() throws RiotApiException {
+
+        Scanner scan = new Scanner(System.in);
+
+        System.out.println("Enter the summoner you'd like to retrieve: ");
+        String input = scan.next();
+
+        Connection posConnection = dbConnect();
+
         try {
 
-            DatabaseMetaData dbmd = connection.getMetaData();
+            DatabaseMetaData dbmd = posConnection.getMetaData();
 
             String[] types = {"TABLE"};
             ResultSet rs = dbmd.getTables(null, null, "%", types);
             while (rs.next()) {
                 System.out.println(rs.getString("TABLE_NAME"));
             }
-            
-            
+
         } catch (SQLException e) {
             e.printStackTrace();
         }
 
-        ApiConfig config = new ApiConfig().setKey("RGAPI-9805073b-be47-4009-840e-b369abbd865a");
+        ApiConfig config = new ApiConfig().setKey("RGAPI-8c101364-a996-419c-8b07-617ab7ef833e");
         RiotApi api = new RiotApi(config);
 
-        //ChampionList champlist = api.getDataChampionList(Platform.NA);
-
-        
-        
-        
-        
         try {
 
-            Summoner summoner = api.getSummonerByName(Platform.NA, "Canada Camera");
+            Summoner summoner = api.getSummonerByName(Platform.NA, input);
+            long accountId = summoner.getAccountId();
             MatchList matchList = api.getMatchListByAccountId(Platform.NA, summoner.getAccountId());
-            
+
             String name = summoner.getName();
 
-            String sql = "INSERT INTO `Summoners` VALUES('" + summoner.getAccountId() + "', '" + name + "');";
-            
+            String sql = "CREATE TABLE IF NOT EXISTS `" + accountId + "`("
+                    + "`summonerName` VARCHAR(45) NOT NULL,"
+                    + " `summonerId` VARCHAR(45) NOT NULL,"
+                    + " PRIMARY KEY(`summonerId`));";
+
             System.out.println(sql);
-                                           
-            Statement stmt = connection.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
-            
-            connection.setAutoCommit(false);
-            
+
+            Statement stmt = posConnection.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
+
+            posConnection.setAutoCommit(false);
+
             stmt.addBatch(sql);
-            
-            ResultSet rs = stmt.executeQuery("SELECT * FROM `Summoners`;");
-            
-            rs.last();
-            
-            System.out.println("rows before batch execution= "+ rs.getRow());
-            
+
             stmt.executeBatch();
-            connection.commit();
-            
-            System.out.println("Batch executed");
-            rs = stmt.executeQuery("select * from Summoners");
+
+            posConnection.commit();
+
+            stmt.clearBatch();
+
+            String sql1 = "IF NOT EXISTS (INSERT INTO `mysqlloldb`.`" + accountId + "` (summonerName, summonerId) VALUES('" + name + "', '" + accountId + "'));";
+
+            stmt.addBatch(sql1);
+
+            System.out.println(sql1);
+
+            stmt.clearBatch();
+
+            String sql3 = "INSERT INTO `AllSummoners`(summonerId, summonerName) "
+                    + "SELECT * FROM (SELECT '" + accountId + "', '" + name + "')"
+                    + " AS temp WHERE NOT EXISTS "
+                    + "(SELECT summonerId FROM `AllSummoners` WHERE summonerId = '" + accountId + "') LIMIT 1";
+
+            stmt.addBatch(sql3);
+
+            System.out.println(sql3);
+
+            //String sql2 = "INSERT INTO `AllSummoners`(summonerId, summonerName) VALUES ('" + accountId + "', '" + name + "');";
+            //stmt.addBatch(sql2);
+            //System.out.println(sql2);
+            ResultSet rs = stmt.executeQuery("SELECT * FROM `AllSummoners`;");
+
             rs.last();
-            System.out.println("rows after batch execution = "+ rs.getRow());
-            
-            
+
+            System.out.println("rows before batch execution= " + rs.getRow());
+
+            stmt.executeBatch();
+
+            posConnection.commit();
+
+            System.out.println("Batch executed");
+            rs = stmt.executeQuery("select * from AllSummoners");
+            rs.last();
+            System.out.println("rows after batch execution = " + rs.getRow());
+
             int check = 0;
-            
+
             if (matchList.getMatches() != null) {
                 for (MatchReference match : matchList.getMatches()) {
-                    if (check < 40) {
+                    if (check < 40 && match.getQueue() == 4) {
 
                         try {
                             Thread.sleep(3000);
@@ -179,24 +214,48 @@ public class Main {
 
                         Match thisMatch = api.getMatch(Platform.NA, match.getGameId());
                         String matchStr = String.valueOf(thisMatch.getGameId());
-                        int id = thisMatch.getParticipantByAccountId(summoner.getAccountId()).getTeamId();
+                        int particid = thisMatch.getParticipantByAccountId(summoner.getAccountId()).getTeamId();
+                        String role = match.getRole();
                         Date expiry = new Date(thisMatch.getGameCreation());
                         String summonerFirstBloodKill = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstBloodKill());
                         String summonerFirstBloodAssist = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstBloodAssist());
                         String summonerFirstTowerKill = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstTowerKill());
                         String summonerFirstTowerAssist = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstTowerKill());
-                        String teamFirstBlood = String.valueOf(thisMatch.getTeamByTeamId(id).isFirstBlood());
-                        String teamFirstTower = String.valueOf(thisMatch.getTeamByTeamId(id).isFirstTower());
+                        String teamFirstBlood = String.valueOf(thisMatch.getTeamByTeamId(particid).isFirstBlood());
+                        String teamFirstTower = String.valueOf(thisMatch.getTeamByTeamId(particid).isFirstTower());
 
                         check++;
 
                         System.out.println("Game id: " + thisMatch.getGameId() + " saved!");
+
+                        String matchSQLQuery = "CREATE TABLE IF NOT EXISTS `" + matchStr + "`("
+                                + "`summoner1` VARCHAR(45) NOT NULL,"
+                                + "`summoner2` VARCHAR(45) NOT NULL,"
+                                + "`summoner3` VARCHAR(45) NOT NULL,"
+                                + "`summoner4` VARCHAR(45) NOT NULL,"
+                                + "`summoner5` VARCHAR(45) NOT NULL,"
+                                + "`summoner6` VARCHAR(45) NOT NULL,"
+                                + "`summoner7` VARCHAR(45) NOT NULL,"
+                                + "`summoner8` VARCHAR(45) NOT NULL,"
+                                + "`summoner9` VARCHAR(45) NOT NULL,"
+                                + "`summoner10` VARCHAR(45) NOT NULL,"
+                                + " PRIMARY KEY(`matchId`));";
+
+                        stmt.addBatch(sql);
+
+                        stmt.executeBatch();
+
+                        posConnection.commit();
+
+                        stmt.clearBatch();
+
+                        System.out.println(sql);
                     }
                 }
             }
 
             System.out.println("Record saved!");
-            
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -204,7 +263,7 @@ public class Main {
     }
 
     public static void dbConnect(String userName, String password, String url) {
-        
+
     }
 
 }
