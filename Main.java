@@ -117,7 +117,11 @@ public class Main {
         Scanner scan = new Scanner(System.in);
 
         System.out.println("Enter the summoner you'd like to retrieve: ");
-        String input = scan.next();
+        String input = scan.nextLine();
+        System.out.println(input);
+        input.replaceAll("\\s+","");
+        
+        System.out.println(input);
 
         Connection posConnection = dbConnect();
 
@@ -146,10 +150,10 @@ public class Main {
 
             String name = summoner.getName();
 
-            String sql = "CREATE TABLE IF NOT EXISTS `" + accountId + "`("
-                    + "`summonerName` VARCHAR(45) NOT NULL,"
-                    + " `summonerId` VARCHAR(45) NOT NULL,"
-                    + " PRIMARY KEY(`summonerId`));";
+            String sql = "INSERT INTO `AllSummoners`(summonerId, summonerName) "
+                    + "SELECT * FROM (SELECT '" + accountId + "', '" + name + "')"
+                    + " AS temp WHERE NOT EXISTS "
+                    + "(SELECT summonerId FROM `AllSummoners` WHERE summonerId = '" + accountId + "') LIMIT 1";
 
             System.out.println(sql);
 
@@ -164,23 +168,17 @@ public class Main {
             posConnection.commit();
 
             stmt.clearBatch();
-
-            String sql1 = "IF NOT EXISTS (INSERT INTO `mysqlloldb`.`" + accountId + "` (summonerName, summonerId) VALUES('" + name + "', '" + accountId + "'));";
-
-            stmt.addBatch(sql1);
-
-            System.out.println(sql1);
-
+            
             stmt.clearBatch();
 
-            String sql3 = "INSERT INTO `AllSummoners`(summonerId, summonerName) "
+            /*String sql3 = "INSERT INTO `AllSummoners`(summonerId, summonerName) "
                     + "SELECT * FROM (SELECT '" + accountId + "', '" + name + "')"
                     + " AS temp WHERE NOT EXISTS "
                     + "(SELECT summonerId FROM `AllSummoners` WHERE summonerId = '" + accountId + "') LIMIT 1";
 
             stmt.addBatch(sql3);
 
-            System.out.println(sql3);
+            System.out.println(sql3);*/
 
             //String sql2 = "INSERT INTO `AllSummoners`(summonerId, summonerName) VALUES ('" + accountId + "', '" + name + "');";
             //stmt.addBatch(sql2);
@@ -202,9 +200,11 @@ public class Main {
 
             int check = 0;
 
+            stmt.clearBatch();
+
             if (matchList.getMatches() != null) {
                 for (MatchReference match : matchList.getMatches()) {
-                    if (check < 40 && match.getQueue() == 4) {
+                    if (check < 2 && match.getQueue() == 4) {
 
                         try {
                             Thread.sleep(3000);
@@ -224,24 +224,38 @@ public class Main {
                         String teamFirstBlood = String.valueOf(thisMatch.getTeamByTeamId(particid).isFirstBlood());
                         String teamFirstTower = String.valueOf(thisMatch.getTeamByTeamId(particid).isFirstTower());
 
-                        check++;
-
-                        System.out.println("Game id: " + thisMatch.getGameId() + " saved!");
-
+                        String matchSQLQuery = "INSERT INTO `AllMatches`(matchId, team1Id, team2Id, date, gameDuration) "
+                        + "SELECT * FROM (SELECT '" + matchStr+ "', '" + matchStr + ".1', '" + matchStr + ".2','" + expiry.toString() + "', '" + thisMatch.getGameDuration() + "' )"
+                        + " AS temp WHERE NOT EXISTS "
+                        + "(SELECT matchId FROM `AllMatches` WHERE matchId = '" + matchStr + "') LIMIT 1";
+                        
+                        
+                        
+                        /*
                         String matchSQLQuery = "CREATE TABLE IF NOT EXISTS `" + matchStr + "`("
-                                + "`summoner1` VARCHAR(45) NOT NULL,"
-                                + "`summoner2` VARCHAR(45) NOT NULL,"
-                                + "`summoner3` VARCHAR(45) NOT NULL,"
-                                + "`summoner4` VARCHAR(45) NOT NULL,"
-                                + "`summoner5` VARCHAR(45) NOT NULL,"
-                                + "`summoner6` VARCHAR(45) NOT NULL,"
-                                + "`summoner7` VARCHAR(45) NOT NULL,"
-                                + "`summoner8` VARCHAR(45) NOT NULL,"
-                                + "`summoner9` VARCHAR(45) NOT NULL,"
-                                + "`summoner10` VARCHAR(45) NOT NULL,"
-                                + " PRIMARY KEY(`matchId`));";
+                                + "`gameId` VARCHAR(45) NOT NULL,"
+                                + "`datePlayed` VARCHAR(45) NOT NULL,"
+                                + "`season` VARCHAR(45) NOT NULL,"
+                                + "`team1` VARCHAR(45) NOT NULL,"
+                                + "`team2` VARCHAR(45) NOT NULL,"
+                                + " PRIMARY KEY(`gameId`));";
 
-                        stmt.addBatch(sql);
+                        String matchSQLEntry = "INSERT INTO `" + matchStr + "`(gameId, datePlayed, season, team1, team2) ("
+                                + "'" + thisMatch + "',"
+                                + "'" + expiry.toString() + "',"
+                                + "'" + thisMatch.getSeasonId() + "',"
+                                + "'" + thisMatch + ".T1',"
+                                + "'" + thisMatch + ".T2');";*/
+                                
+                        check++;
+                        
+                        System.out.println(matchSQLQuery);
+                        
+                        //System.out.println(matchSQLEntry);
+
+                        stmt.addBatch(matchSQLQuery);
+                        
+                        //stmt.addBatch(matchSQLEntry);
 
                         stmt.executeBatch();
 
@@ -249,7 +263,7 @@ public class Main {
 
                         stmt.clearBatch();
 
-                        System.out.println(sql);
+                        System.out.println(matchSQLQuery);
                     }
                 }
             }
