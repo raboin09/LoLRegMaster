@@ -26,6 +26,8 @@ import java.util.Date;
 import java.time.Instant;
 import java.time.ZoneId;
 
+import java.math.BigInteger;
+
 import java.util.Scanner;
 
 import java.util.List;
@@ -56,44 +58,6 @@ public class Main {
         getMatches();
     }
 
-    public static String getChampName(String id) {
-
-        String champName = "";
-
-        try {
-
-            File fXmlFile = new File("data\\champlist.xml");
-            DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
-            Document doc = dBuilder.parse(fXmlFile);
-
-            doc.getDocumentElement().normalize();
-
-            NodeList nList = doc.getDocumentElement().getChildNodes();
-
-            for (int temp = 0; temp < nList.getLength(); temp++) {
-
-                Node nNode = nList.item(temp);
-
-                if (nNode.getNodeType() == Node.ELEMENT_NODE) {
-
-                    Element eElement = (Element) nNode;
-
-                    champName = nNode.getNodeName();
-
-                    if (id.equals(eElement.getAttribute("id"))) {
-                        return champName;
-                    }
-
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        return champName;
-    }
-
     public static Connection dbConnect() {
         System.out.println("Connecting to MySQL Server...");
 
@@ -121,15 +85,15 @@ public class Main {
         return connection;
     }
 
-    public static void insertPlayers(Connection posConnection, String matchStr, int playerId, int kills, int deaths, int assists, String firstBloodKill, String firstBloodAssist, String firstBloodTowerKill, String firstBloodTowerAssist, String summonerId, String champPlayed) {
+    public static void insertPlayers(Connection posConnection, String matchStr, BigInteger playerId, int kills, int deaths, int assists, String firstBloodKill, String firstBloodAssist, String firstBloodTowerKill, String firstBloodTowerAssist, String summonerId, String champPlayed) {
 
         try {
-            String insertPlayerSQLQuery = "INSERT INTO `Players`(playerId, kills, deaths, assists, firstBloodKill, firstBloodAssist, firstBloodTowerKill, firstBloodTowerAssist, summonerId, champPlayed) SELECT * FROM (SELECT '"
+            
+            String insertPlayerSQLQuery = "INSERT IGNORE INTO `Players`(playerId, kills, deaths, assists, firstBloodKill, firstBloodAssist, firstBloodTowerKill, firstBloodTowerAssist, summonerId, champPlayed) VALUES ( '" 
                     + playerId + "', '" + kills + "', '" + deaths + "','" + assists + "', '" + firstBloodKill + "', '"
-                    + firstBloodAssist + "', '" + firstBloodTowerKill + "', '" + firstBloodTowerAssist + "', '" + summonerId + "', '" + champPlayed + "')"
-                    + " AS temp WHERE NOT EXISTS "
-                    + "(SELECT teamId FROM `Teams` WHERE matchId = '" + matchStr + "2') LIMIT 1";
-
+                    + firstBloodAssist + "', '" + firstBloodTowerKill + "', '" + firstBloodTowerAssist + "', '" + summonerId + "', '" + champPlayed + "')";
+            
+            
             System.out.println(insertPlayerSQLQuery);
 
             Statement stmt = posConnection.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
@@ -143,6 +107,369 @@ public class Main {
             posConnection.commit();
 
             stmt.clearBatch();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }    
+
+    public static void getMatches() throws RiotApiException {
+
+        Scanner scan = new Scanner(System.in);
+
+        System.out.println("Enter the summoner you'd like to retrieve: ");
+        String input = scan.nextLine();
+        System.out.println(input);
+        input.replaceAll("\\s+", "");
+
+        System.out.println(input);
+
+        Connection posConnection = dbConnect();
+
+        try {
+
+            DatabaseMetaData dbmd = posConnection.getMetaData();
+
+            String[] types = {"TABLE"};
+            ResultSet rs = dbmd.getTables(null, null, "%", types);
+            while (rs.next()) {
+                System.out.println(rs.getString("TABLE_NAME"));
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        ApiConfig config = new ApiConfig().setKey("RGAPI-8c101364-a996-419c-8b07-617ab7ef833e");
+        RiotApi api = new RiotApi(config);
+
+        try {
+
+            Summoner summoner = api.getSummonerByName(Platform.NA, input);
+            long accountId = summoner.getAccountId();
+            MatchList matchList = api.getMatchListByAccountId(Platform.NA, summoner.getAccountId());
+
+            String name = summoner.getName();
+
+            String sql = "INSERT INTO `AllSummoners`(summonerId, summonerName) "
+                    + "SELECT * FROM (SELECT '" + accountId + "', '" + name + "')"
+                    + " AS temp WHERE NOT EXISTS "
+                    + "(SELECT summonerId FROM `AllSummoners` WHERE summonerId = '" + accountId + "') LIMIT 1";
+
+            System.out.println(sql);
+
+            Statement stmt = posConnection.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
+
+            posConnection.setAutoCommit(false);
+
+            stmt.addBatch(sql);
+
+            stmt.executeBatch();
+
+            posConnection.commit();
+
+            stmt.clearBatch();
+
+            stmt.clearBatch();
+
+            /*String sql3 = "INSERT INTO `AllSummoners`(summonerId, summonerName) "
+             + "SELECT * FROM (SELECT '" + accountId + "', '" + name + "')"
+             + " AS temp WHERE NOT EXISTS "
+             + "(SELECT summonerId FROM `AllSummoners` WHERE summonerId = '" + accountId + "') LIMIT 1";
+
+             stmt.addBatch(sql3);
+
+             System.out.println(sql3);*/
+            //String sql2 = "INSERT INTO `AllSummoners`(summonerId, summonerName) VALUES ('" + accountId + "', '" + name + "');";
+            //stmt.addBatch(sql2);
+            //System.out.println(sql2);
+            ResultSet rs = stmt.executeQuery("SELECT * FROM `AllSummoners`;");
+
+            rs.last();
+
+            System.out.println("rows before batch execution= " + rs.getRow());
+
+            stmt.executeBatch();
+
+            posConnection.commit();
+
+            System.out.println("Batch executed");
+            rs = stmt.executeQuery("select * from AllSummoners");
+            rs.last();
+            System.out.println("rows after batch execution = " + rs.getRow());
+
+            int check = 0;
+
+            stmt.clearBatch();
+
+            if (matchList.getMatches() != null) {
+                for (MatchReference match : matchList.getMatches()) {
+                    if (check < 2 && match.getQueue() == 4) {
+
+                        try {
+                            Thread.sleep(3000);
+                        } catch (InterruptedException ex) {
+                            Thread.currentThread().interrupt();
+                        }
+
+                        Match thisMatch = api.getMatch(Platform.NA, match.getGameId());
+                        String matchStr = String.valueOf(thisMatch.getGameId());
+
+                        //int particid = thisMatch.getParticipantByAccountId(summoner.getAccountId()).getTeamId();
+                        List<Participant> participants = thisMatch.getParticipants();
+
+                        List<ParticipantIdentity> partID = thisMatch.getParticipantIdentities();
+
+                        List<TeamStats> teamStats = thisMatch.getTeams();
+
+                        Iterator<TeamStats> lsIt = teamStats.listIterator();
+
+                        TeamStats team1Stats = lsIt.next();
+
+                        TeamStats team2Stats = lsIt.next();
+
+                        int team1Id = team1Stats.getTeamId();
+
+                        int team2Id = team2Stats.getTeamId();
+
+                        Map<String, String> acctIDToPartIdMap = new HashMap<String, String>();
+
+                        for (ParticipantIdentity parId : partID) {
+                            acctIDToPartIdMap.put(String.valueOf(parId.getParticipantId()), String.valueOf(parId.getPlayer().getAccountId()));
+                        }
+
+                        ParticipantTimeline midTime;
+                        ParticipantTimeline jngTime;
+                        ParticipantTimeline topTime;
+                        ParticipantTimeline adcTime;
+                        ParticipantTimeline supTime;
+
+                        ParticipantTimeline eMidTime;
+                        ParticipantTimeline eTopTime;
+                        ParticipantTimeline eJngTime;
+                        ParticipantTimeline eSupTime;
+                        ParticipantTimeline eAdcTime;
+
+                        String mid1PIdS = matchStr + "1" + "3";
+                        String top1PIdS = matchStr + "1" + "1";
+                        String jng1PIdS = matchStr + "1" + "2";
+                        String adc1PIdS = matchStr + "1" + "4";
+                        String sup1PIdS = matchStr + "1" + "5";
+
+                        String mid2PIdS = matchStr + "2" + "3";
+                        String top2PIdS = matchStr + "2" + "1";
+                        String jng2PIdS = matchStr + "2" + "2";
+                        String adc2PIdS = matchStr + "2" + "4";
+                        String sup2PIdS = matchStr + "2" + "5";
+
+                        BigInteger mid1PId = new BigInteger(mid1PIdS);
+                        BigInteger top1PId = new BigInteger(top1PIdS);
+                        BigInteger jng1PId = new BigInteger(jng1PIdS);
+                        BigInteger adc1PId = new BigInteger(adc1PIdS);
+                        BigInteger sup1PId = new BigInteger(sup1PIdS);
+
+                        BigInteger mid2PId = new BigInteger(mid2PIdS);
+                        BigInteger top2PId = new BigInteger(top2PIdS);
+                        BigInteger jng2PId = new BigInteger(jng2PIdS);
+                        BigInteger adc2PId = new BigInteger(adc2PIdS);
+                        BigInteger sup2PId = new BigInteger(sup2PIdS);
+
+                        for (Participant part : participants) {
+                            switch (part.getTimeline().getLane().toLowerCase()) {
+                                case "mid":
+                                case "middle":
+                                    if (part.getTeamId() == team1Id) {
+                                        midTime = part.getTimeline();
+                                        insertPlayers(posConnection, matchStr, mid1PId, part.getStats().getKills(), part.getStats().getDeaths(),
+                                                part.getStats().getAssists(), String.valueOf(part.getStats().isFirstBloodKill()), String.valueOf(part.getStats().isFirstBloodAssist()),
+                                                String.valueOf(part.getStats().isFirstTowerKill()), String.valueOf(part.getStats().isFirstTowerAssist()), 
+                                                acctIDToPartIdMap.get(String.valueOf(part.getParticipantId())), convertChamp(part.getChampionId()));
+                                    } else if (part.getTeamId() == team2Id) {
+                                        midTime = part.getTimeline();
+                                        insertPlayers(posConnection, matchStr, mid2PId, part.getStats().getKills(), part.getStats().getDeaths(),
+                                                part.getStats().getAssists(), String.valueOf(part.getStats().isFirstBloodKill()), String.valueOf(part.getStats().isFirstBloodAssist()),
+                                                String.valueOf(part.getStats().isFirstTowerKill()), String.valueOf(part.getStats().isFirstTowerAssist()), 
+                                                acctIDToPartIdMap.get(String.valueOf(part.getParticipantId())), convertChamp(part.getChampionId()));
+                                    }
+                                    break;
+                                case "jungle":
+                                    if (part.getTeamId() == team1Id) {
+                                        jngTime = part.getTimeline();
+                                        insertPlayers(posConnection, matchStr, jng1PId, part.getStats().getKills(), part.getStats().getDeaths(),
+                                                part.getStats().getAssists(), String.valueOf(part.getStats().isFirstBloodKill()), String.valueOf(part.getStats().isFirstBloodAssist()),
+                                                String.valueOf(part.getStats().isFirstTowerKill()), String.valueOf(part.getStats().isFirstTowerAssist()), 
+                                                acctIDToPartIdMap.get(String.valueOf(part.getParticipantId())), convertChamp(part.getChampionId()));
+                                    } else if (part.getTeamId() == team2Id) {
+                                        eJngTime = part.getTimeline();
+                                        insertPlayers(posConnection, matchStr, jng2PId, part.getStats().getKills(), part.getStats().getDeaths(),
+                                                part.getStats().getAssists(), String.valueOf(part.getStats().isFirstBloodKill()), String.valueOf(part.getStats().isFirstBloodAssist()),
+                                                String.valueOf(part.getStats().isFirstTowerKill()), String.valueOf(part.getStats().isFirstTowerAssist()), 
+                                                acctIDToPartIdMap.get(String.valueOf(part.getParticipantId())), convertChamp(part.getChampionId()));
+                                    }
+                                    break;
+
+                                case "top":
+                                    if (part.getTeamId() == team1Id) {
+                                        topTime = part.getTimeline();
+                                        insertPlayers(posConnection, matchStr, top1PId, part.getStats().getKills(), part.getStats().getDeaths(),
+                                                part.getStats().getAssists(), String.valueOf(part.getStats().isFirstBloodKill()), String.valueOf(part.getStats().isFirstBloodAssist()),
+                                                String.valueOf(part.getStats().isFirstTowerKill()), String.valueOf(part.getStats().isFirstTowerAssist()), 
+                                                acctIDToPartIdMap.get(String.valueOf(part.getParticipantId())), convertChamp(part.getChampionId()));
+                                    } else if (part.getTeamId() == team2Id) {
+                                        eTopTime = part.getTimeline();
+                                        insertPlayers(posConnection, matchStr, top2PId, part.getStats().getKills(), part.getStats().getDeaths(),
+                                                part.getStats().getAssists(), String.valueOf(part.getStats().isFirstBloodKill()), String.valueOf(part.getStats().isFirstBloodAssist()),
+                                                String.valueOf(part.getStats().isFirstTowerKill()), String.valueOf(part.getStats().isFirstTowerAssist()), 
+                                                acctIDToPartIdMap.get(String.valueOf(part.getParticipantId())), convertChamp(part.getChampionId()));
+                                    }
+                                    break;
+                                case "bottom":
+                                case "bot":
+                                    switch (part.getTimeline().getRole().toLowerCase()) {
+                                        case "duo_support":
+                                            if (part.getTeamId() == team1Id) {
+                                                supTime = part.getTimeline();
+                                                insertPlayers(posConnection, matchStr, sup1PId, part.getStats().getKills(), part.getStats().getDeaths(),
+                                                part.getStats().getAssists(), String.valueOf(part.getStats().isFirstBloodKill()), String.valueOf(part.getStats().isFirstBloodAssist()),
+                                                String.valueOf(part.getStats().isFirstTowerKill()), String.valueOf(part.getStats().isFirstTowerAssist()), 
+                                                acctIDToPartIdMap.get(String.valueOf(part.getParticipantId())), convertChamp(part.getChampionId()));
+                                            } else if (part.getTeamId() == team2Id) {
+                                                eSupTime = part.getTimeline();
+                                                insertPlayers(posConnection, matchStr, sup2PId, part.getStats().getKills(), part.getStats().getDeaths(),
+                                                part.getStats().getAssists(), String.valueOf(part.getStats().isFirstBloodKill()), String.valueOf(part.getStats().isFirstBloodAssist()),
+                                                String.valueOf(part.getStats().isFirstTowerKill()), String.valueOf(part.getStats().isFirstTowerAssist()), 
+                                                acctIDToPartIdMap.get(String.valueOf(part.getParticipantId())), convertChamp(part.getChampionId()));
+                                            }
+                                            break;
+                                        case "duo_carry":
+                                            if (part.getTeamId() == team1Id) {
+                                                adcTime = part.getTimeline();
+                                                insertPlayers(posConnection, matchStr, adc1PId, part.getStats().getKills(), part.getStats().getDeaths(),
+                                                part.getStats().getAssists(), String.valueOf(part.getStats().isFirstBloodKill()), String.valueOf(part.getStats().isFirstBloodAssist()),
+                                                String.valueOf(part.getStats().isFirstTowerKill()), String.valueOf(part.getStats().isFirstTowerAssist()), 
+                                                acctIDToPartIdMap.get(String.valueOf(part.getParticipantId())), convertChamp(part.getChampionId()));
+                                            } else if (part.getTeamId() == team2Id) {
+                                                eAdcTime = part.getTimeline();
+                                                insertPlayers(posConnection, matchStr, adc2PId, part.getStats().getKills(), part.getStats().getDeaths(),
+                                                part.getStats().getAssists(), String.valueOf(part.getStats().isFirstBloodKill()), String.valueOf(part.getStats().isFirstBloodAssist()),
+                                                String.valueOf(part.getStats().isFirstTowerKill()), String.valueOf(part.getStats().isFirstTowerAssist()), 
+                                                acctIDToPartIdMap.get(String.valueOf(part.getParticipantId())), convertChamp(part.getChampionId()));
+                                            }
+                                            break;
+                                    }
+                                    break;
+
+                            }
+
+                        }
+
+                        String role = match.getRole();
+                        Date expiry = new Date(thisMatch.getGameCreation());
+
+                        /*String summonerFirstBloodKill = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstBloodKill());
+                         String summonerFirstBloodAssist = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstBloodAssist());
+                         String summonerFirstTowerKill = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstTowerKill());
+                         String summonerFirstTowerAssist = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstTowerKill());
+                         String teamFirstBlood = String.valueOf(thisMatch.getTeamByTeamId(particid).isFirstBlood());
+                         String teamFirstTower = String.valueOf(thisMatch.getTeamByTeamId(particid).isFirstTower());*/
+                        String team1FB = String.valueOf(team1Stats.isFirstBlood());
+                        String team1FBar = String.valueOf(team1Stats.isFirstBaron());
+                        String team1FTower = String.valueOf(team1Stats.isFirstTower());
+                        String team1FDrag = String.valueOf(team1Stats.isFirstDragon());
+
+                        String team2FB = String.valueOf(team2Stats.isFirstBlood());
+                        String team2FBar = String.valueOf(team2Stats.isFirstBaron());
+                        String team2FTower = String.valueOf(team2Stats.isFirstTower());
+                        String team2FDrag = String.valueOf(team2Stats.isFirstDragon());
+
+                        long duration = thisMatch.getGameDuration();
+
+                        int minutes;
+
+                        int seconds;
+
+                        minutes = (int) duration / 60;
+
+                        double remainder = duration % 60;
+
+                        seconds = (int) Math.round(remainder * 60);
+
+                        String matchSQLQuery = "REPLACE INTO `AllMatches`(matchId, team1Id, team2Id, date, gameDuration) "
+                                + " VALUES ('" + matchStr + "', '" + matchStr + "1', '" + matchStr + "2','" + expiry.toString() + "', '" + minutes + ":" + seconds + "')";
+                        
+                        System.out.println(matchSQLQuery);
+                        
+                        stmt.addBatch(matchSQLQuery);
+                        
+                        stmt = posConnection.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
+
+                        posConnection.setAutoCommit(false);
+                        
+                        stmt.executeBatch();
+                        
+                        posConnection.commit();
+
+                        stmt.clearBatch();
+
+                        String team1SQLQuery = "REPLACE INTO `Teams`(midPlayerId, topPlayerId, jngPlayerId, supPlayerId, adcPlayerId, teamFirstBlood,"
+                                + " teamFirstBaron, teamFirstTower, teamFirstDrag, isWin, teamId) VALUES('"
+                                + mid1PId + "', '" + top1PId + "', '" + jng1PId + "','" + sup1PId + "', '" + adc1PId + "', '"
+                                + team1FB + "', '" + team1FBar + "', '" + team1FTower + "', '" + team1FDrag + "', '" + team1Stats.getWin() + "','" + matchStr + "1')";
+                        
+                        stmt.addBatch(team1SQLQuery);
+                        
+                        stmt = posConnection.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
+
+                        posConnection.setAutoCommit(false);
+                        
+                        stmt.executeBatch();
+                        
+                        posConnection.commit();
+
+                        stmt.clearBatch();
+
+                        String team2SQLQuery = "REPLACE INTO `Teams`(midPlayerId, topPlayerId, jngPlayerId, supPlayerId, adcPlayerId, teamFirstBlood, "
+                                + "teamFirstBaron, teamFirstTower, teamFirstDrag, isWin, teamId) VALUES('"
+                                + mid2PId + "', '" + top2PId + "', '" + jng2PId + "','" + sup2PId + "', '" + adc2PId + "', '"
+                                + team2FB + "', '" + team2FBar + "', '" + team2FTower + "', '" + team2FDrag + "', '" + team2Stats.getWin() + "','" + matchStr + "2')";
+                        
+                        stmt.addBatch(team2SQLQuery);
+                        
+                        stmt = posConnection.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
+
+                        posConnection.setAutoCommit(false);
+                        
+                        stmt.executeBatch();
+                        
+                        posConnection.commit();
+
+                        stmt.clearBatch();
+
+                        check++;
+
+                        System.out.println(team1SQLQuery);
+                        System.out.println(team2SQLQuery);
+                        
+                        stmt.addBatch(team1SQLQuery);
+                        stmt.addBatch(team2SQLQuery);
+                        
+                        stmt = posConnection.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
+
+                        posConnection.setAutoCommit(false);
+                        
+                        stmt.executeBatch();                        
+
+                        posConnection.commit();
+
+                        stmt.clearBatch();
+
+                        System.out.println(matchSQLQuery);
+                    }
+                }
+            }
+
+            System.out.println("Record saved!");
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -568,314 +895,6 @@ public class Main {
         }
 
         return champName;
-    }
-
-    public static void getMatches() throws RiotApiException {
-
-        Scanner scan = new Scanner(System.in);
-
-        System.out.println("Enter the summoner you'd like to retrieve: ");
-        String input = scan.nextLine();
-        System.out.println(input);
-        input.replaceAll("\\s+", "");
-
-        System.out.println(input);
-
-        Connection posConnection = dbConnect();
-
-        try {
-
-            DatabaseMetaData dbmd = posConnection.getMetaData();
-
-            String[] types = {"TABLE"};
-            ResultSet rs = dbmd.getTables(null, null, "%", types);
-            while (rs.next()) {
-                System.out.println(rs.getString("TABLE_NAME"));
-            }
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-
-        ApiConfig config = new ApiConfig().setKey("RGAPI-8c101364-a996-419c-8b07-617ab7ef833e");
-        RiotApi api = new RiotApi(config);
-
-        try {
-
-            Summoner summoner = api.getSummonerByName(Platform.NA, input);
-            long accountId = summoner.getAccountId();
-            MatchList matchList = api.getMatchListByAccountId(Platform.NA, summoner.getAccountId());
-
-            String name = summoner.getName();
-
-            String sql = "INSERT INTO `AllSummoners`(summonerId, summonerName) "
-                    + "SELECT * FROM (SELECT '" + accountId + "', '" + name + "')"
-                    + " AS temp WHERE NOT EXISTS "
-                    + "(SELECT summonerId FROM `AllSummoners` WHERE summonerId = '" + accountId + "') LIMIT 1";
-
-            System.out.println(sql);
-
-            Statement stmt = posConnection.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
-
-            posConnection.setAutoCommit(false);
-
-            stmt.addBatch(sql);
-
-            stmt.executeBatch();
-
-            posConnection.commit();
-
-            stmt.clearBatch();
-
-            stmt.clearBatch();
-
-            /*String sql3 = "INSERT INTO `AllSummoners`(summonerId, summonerName) "
-             + "SELECT * FROM (SELECT '" + accountId + "', '" + name + "')"
-             + " AS temp WHERE NOT EXISTS "
-             + "(SELECT summonerId FROM `AllSummoners` WHERE summonerId = '" + accountId + "') LIMIT 1";
-
-             stmt.addBatch(sql3);
-
-             System.out.println(sql3);*/
-            //String sql2 = "INSERT INTO `AllSummoners`(summonerId, summonerName) VALUES ('" + accountId + "', '" + name + "');";
-            //stmt.addBatch(sql2);
-            //System.out.println(sql2);
-            ResultSet rs = stmt.executeQuery("SELECT * FROM `AllSummoners`;");
-
-            rs.last();
-
-            System.out.println("rows before batch execution= " + rs.getRow());
-
-            stmt.executeBatch();
-
-            posConnection.commit();
-
-            System.out.println("Batch executed");
-            rs = stmt.executeQuery("select * from AllSummoners");
-            rs.last();
-            System.out.println("rows after batch execution = " + rs.getRow());
-
-            int check = 0;
-
-            stmt.clearBatch();
-
-            if (matchList.getMatches() != null) {
-                for (MatchReference match : matchList.getMatches()) {
-                    if (check < 2 && match.getQueue() == 4) {
-
-                        try {
-                            Thread.sleep(3000);
-                        } catch (InterruptedException ex) {
-                            Thread.currentThread().interrupt();
-                        }
-
-                        Match thisMatch = api.getMatch(Platform.NA, match.getGameId());
-                        String matchStr = String.valueOf(thisMatch.getGameId());
-
-                        //int particid = thisMatch.getParticipantByAccountId(summoner.getAccountId()).getTeamId();
-                        List<Participant> participants = thisMatch.getParticipants();
-
-                        List<ParticipantIdentity> partID = thisMatch.getParticipantIdentities();
-
-                        List<TeamStats> teamStats = thisMatch.getTeams();
-
-                        Iterator<TeamStats> lsIt = teamStats.listIterator();
-
-                        TeamStats team1Stats = lsIt.next();
-
-                        TeamStats team2Stats = lsIt.next();
-
-                        int team1Id = team1Stats.getTeamId();
-
-                        int team2Id = team2Stats.getTeamId();
-
-                        Map<String, String> acctIDToPartIdMap = new HashMap<String, String>();
-
-                        for (ParticipantIdentity parId : partID) {
-                            acctIDToPartIdMap.put(String.valueOf(parId.getParticipantId()), String.valueOf(parId.getPlayer().getAccountId()));
-                        }
-
-                        ParticipantTimeline midTime;
-                        ParticipantTimeline jngTime;
-                        ParticipantTimeline topTime;
-                        ParticipantTimeline adcTime;
-                        ParticipantTimeline supTime;
-
-                        ParticipantTimeline eMidTime;
-                        ParticipantTimeline eTopTime;
-                        ParticipantTimeline eJngTime;
-                        ParticipantTimeline eSupTime;
-                        ParticipantTimeline eAdcTime;
-
-                        String mid1PIdS = matchStr + "1" + "3";
-                        String top1PIdS = matchStr + "1" + "1";
-                        String jng1PIdS = matchStr + "1" + "2";
-                        String adc1PIdS = matchStr + "1" + "4";
-                        String sup1PIdS = matchStr + "1" + "5";
-
-                        String mid2PIdS = matchStr + "2" + "3";
-                        String top2PIdS = matchStr + "2" + "1";
-                        String jng2PIdS = matchStr + "2" + "2";
-                        String adc2PIdS = matchStr + "2" + "4";
-                        String sup2PIdS = matchStr + "2" + "5";
-
-                        int mid1PId = Integer.parseInt(mid1PIdS);
-                        int top1PId = Integer.parseInt(mid1PIdS);
-                        int jng1PId = Integer.parseInt(mid1PIdS);
-                        int adc1PId = Integer.parseInt(mid1PIdS);
-                        int sup1PId = Integer.parseInt(mid1PIdS);
-
-                        int mid2PId = Integer.parseInt(mid2PIdS);
-                        int top2PId = Integer.parseInt(top2PIdS);
-                        int jng2PId = Integer.parseInt(jng2PIdS);
-                        int adc2PId = Integer.parseInt(adc2PIdS);
-                        int sup2PId = Integer.parseInt(sup2PIdS);
-
-                        for (Participant part : participants) {
-                            switch (part.getTimeline().getLane().toLowerCase()) {
-                                case "mid":
-                                case "middle":
-                                    if (part.getTeamId() == team1Id) {
-                                        midTime = part.getTimeline();
-                                        insertPlayers(posConnection, matchStr, mid1PId, part.getStats().getKills(), part.getStats().getDeaths(),
-                                                part.getStats().getAssists(), String.valueOf(part.getStats().isFirstBloodKill()), String.valueOf(part.getStats().isFirstBloodAssist()),
-                                                String.valueOf(part.getStats().isFirstTowerKill()), String.valueOf(part.getStats().isFirstTowerAssist()), acctIDToPartIdMap.get(part.getParticipantId()), String.valueOf(part.getChampionId()));
-                                    } else if (part.getTeamId() == team2Id) {
-                                        midTime = part.getTimeline();
-                                    }
-                                    break;
-                                case "jungle":
-                                    if (part.getTeamId() == team1Id) {
-                                        jngTime = part.getTimeline();
-                                    } else if (part.getTeamId() == team2Id) {
-                                        eJngTime = part.getTimeline();
-                                    }
-                                    break;
-
-                                case "top":
-                                    if (part.getTeamId() == team1Id) {
-                                        topTime = part.getTimeline();
-                                    } else if (part.getTeamId() == team2Id) {
-                                        eTopTime = part.getTimeline();
-                                    }
-                                    break;
-                                case "bottom":
-                                case "bot":
-                                    switch (part.getTimeline().getRole().toLowerCase()) {
-                                        case "duo_support":
-                                            if (part.getTeamId() == team1Id) {
-                                                supTime = part.getTimeline();
-                                            } else if (part.getTeamId() == team2Id) {
-                                                eSupTime = part.getTimeline();
-                                            }
-                                            break;
-                                        case "duo_carry":
-                                            if (part.getTeamId() == team1Id) {
-                                                adcTime = part.getTimeline();
-                                            } else if (part.getTeamId() == team2Id) {
-                                                eAdcTime = part.getTimeline();
-                                            }
-                                            break;
-                                    }
-                                    break;
-
-                            }
-
-                        }
-
-                        String role = match.getRole();
-                        Date expiry = new Date(thisMatch.getGameCreation());
-
-                        /*String summonerFirstBloodKill = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstBloodKill());
-                         String summonerFirstBloodAssist = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstBloodAssist());
-                         String summonerFirstTowerKill = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstTowerKill());
-                         String summonerFirstTowerAssist = String.valueOf(thisMatch.getParticipantByAccountId(summoner.getAccountId()).getStats().isFirstTowerKill());
-                         String teamFirstBlood = String.valueOf(thisMatch.getTeamByTeamId(particid).isFirstBlood());
-                         String teamFirstTower = String.valueOf(thisMatch.getTeamByTeamId(particid).isFirstTower());*/
-                        String team1FB = String.valueOf(team1Stats.isFirstBlood());
-                        String team1FBar = String.valueOf(team1Stats.isFirstBaron());
-                        String team1FTower = String.valueOf(team1Stats.isFirstTower());
-                        String team1FDrag = String.valueOf(team1Stats.isFirstDragon());
-
-                        String team2FB = String.valueOf(team2Stats.isFirstBlood());
-                        String team2FBar = String.valueOf(team2Stats.isFirstBaron());
-                        String team2FTower = String.valueOf(team2Stats.isFirstTower());
-                        String team2FDrag = String.valueOf(team2Stats.isFirstDragon());
-
-                        long duration = thisMatch.getGameDuration();
-
-                        int minutes;
-
-                        int seconds;
-
-                        minutes = (int) duration / 60;
-
-                        double remainder = duration % 60;
-
-                        seconds = (int) Math.round(remainder * 60);
-
-                        String matchSQLQuery = "INSERT INTO `AllMatches`(matchId, team1Id, team2Id, date, gameDuration) "
-                                + "SELECT * FROM (SELECT '" + matchStr + "', '" + matchStr + "1', '" + matchStr + "2','" + expiry.toString() + "', '" + minutes + ":" + seconds + "' )"
-                                + " AS temp WHERE NOT EXISTS "
-                                + "(SELECT matchId FROM `AllMatches` WHERE matchId = '" + matchStr + "') LIMIT 1";
-
-                        String team1SQLQuery = "INSERT INTO `Teams`(midPlayerId, topPlayersId, jngPlayerId, supPlayerId, adcPlayerId, teamFirstBlood, teamFirstBaron, teamFirstTower, teamFirstDrag, isWin, teamId) SELECT * FROM (SELECT '"
-                                + mid1PId + "', '" + top1PId + "', '" + jng1PId + "','" + sup1PId + "', '" + adc1PId + "', '"
-                                + team1FB + "', '" + team1FBar + "', '" + team1FTower + "', '" + team1FDrag + "', '" + team1Stats.getWin() + "','" + matchStr + "1')"
-                                + " AS temp WHERE NOT EXISTS "
-                                + "(SELECT teamId FROM `Teams` WHERE matchId = '" + matchStr + "1') LIMIT 1";
-
-                        String team2SQLQuery = "INSERT INTO `Teams`(midPlayerId, topPlayersId, jngPlayerId, supPlayerId, adcPlayerId, teamFirstBlood, teamFirstBaron, teamFirstTower, teamFirstDrag, isWin, teamId) SELECT * FROM (SELECT '"
-                                + mid2PId + "', '" + top2PId + "', '" + jng2PId + "','" + sup2PId + "', '" + adc2PId + "', '"
-                                + team2FB + "', '" + team2FBar + "', '" + team2FTower + "', '" + team2FDrag + "', '" + team2Stats.getWin() + "','" + matchStr + "2')"
-                                + " AS temp WHERE NOT EXISTS "
-                                + "(SELECT teamId FROM `Teams` WHERE matchId = '" + matchStr + "2') LIMIT 1";
-
-
-                        /*
-                         String matchSQLQuery = "CREATE TABLE IF NOT EXISTS `" + matchStr + "`("
-                         + "`gameId` VARCHAR(45) NOT NULL,"
-                         + "`datePlayed` VARCHAR(45) NOT NULL,"
-                         + "`season` VARCHAR(45) NOT NULL,"
-                         + "`team1` VARCHAR(45) NOT NULL,"
-                         + "`team2` VARCHAR(45) NOT NULL,"
-                         + " PRIMARY KEY(`gameId`));";
-
-                         String matchSQLEntry = "INSERT INTO `" + matchStr + "`(gameId, datePlayed, season, team1, team2) ("
-                         + "'" + thisMatch + "',"
-                         + "'" + expiry.toString() + "',"
-                         + "'" + thisMatch.getSeasonId() + "',"
-                         + "'" + thisMatch + ".T1',"
-                         + "'" + thisMatch + ".T2');";*/
-                        check++;
-
-                        System.out.println(matchSQLQuery);
-
-                        //System.out.println(matchSQLEntry);
-                        stmt.addBatch(matchSQLQuery);
-
-                        //stmt.addBatch(matchSQLEntry);
-                        stmt.executeBatch();
-
-                        posConnection.commit();
-
-                        stmt.clearBatch();
-
-                        System.out.println(matchSQLQuery);
-                    }
-                }
-            }
-
-            System.out.println("Record saved!");
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-    }
-
-    public static void dbConnect(String userName, String password, String url) {
-
     }
 
 }
