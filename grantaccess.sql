@@ -1,0 +1,1 @@
+GRANT ALL PRIVILEGES ON mysqlloldb.* To 'remoteu'@'%' IDENTIFIED BY 'password';

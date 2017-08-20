@@ -206,15 +206,17 @@ public class Main {
             posConnection.commit();
 
             int check = 0;
+            
+            int matchListSize = matchList.getTotalGames();
 
             stmt.clearBatch();
 
             if (matchList.getMatches() != null) {
                 for (MatchReference match : matchList.getMatches()) {
-                    if (check < 100 && match.getQueue() == 4) {
+                    if (check < matchListSize && match.getQueue() == 420) {
 
                         try {
-                            Thread.sleep(10000);
+                            Thread.sleep(3000);
                         } catch (InterruptedException ex) {
                             Thread.currentThread().interrupt();
                         }
@@ -388,8 +390,7 @@ public class Main {
                         minutes = (int) duration / 60;
                         double remainder = duration % 60;
                         seconds = (int) Math.round(remainder * 60);                        
-                        String secondsStr = String.valueOf(seconds);                        
-                        secondsStr.substring(0, 1);                   
+                        String secondsStr = String.valueOf(seconds);          
 
                         
                        String matchSQLQuery = "INSERT INTO `AllMatches`(matchId, team1Id, team2Id, date, gameDuration) "

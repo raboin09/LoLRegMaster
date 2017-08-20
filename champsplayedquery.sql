@@ -1,0 +1,1 @@
+select champPlayed, isWin, summonerName from Teams left join (select playerId, summonerName, champPlayed from Players left join AllSummoners on Players.summonerId = AllSummoners.summonerId ) AS summs on Teams.adcPlayerId = summs.playerId where summs.summonerName IS NOT NULL;
