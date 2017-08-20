@@ -458,7 +458,7 @@ public class Main {
 
                         stmt.clearBatch();
                         
-                        String midplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Players` left join `Teams` on Players.playerId = Teams.midPlayerId);";
+                        String midplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Teams` left join `Players` on Players.playerId = Teams.midPlayerId);";
                         
                         stmt.addBatch(midplayerToTeamSQL);
 
@@ -468,7 +468,7 @@ public class Main {
 
                         stmt.clearBatch();
                         
-                        String adcplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Players` left join `Teams` on Players.playerId = Teams.adcPlayerId);";
+                        String adcplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Teams` left join `Players` on Players.playerId = Teams.adcPlayerId);";
                         
                         stmt.addBatch(adcplayerToTeamSQL);
 
@@ -478,7 +478,7 @@ public class Main {
 
                         stmt.clearBatch();
                         
-                        String jngplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Players` left join `Teams` on Players.playerId = Teams.jngPlayerId);";
+                        String jngplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Teams` left join `Players` on Players.playerId = Teams.jngPlayerId);";
                         
                         stmt.addBatch(jngplayerToTeamSQL);
 
@@ -488,7 +488,7 @@ public class Main {
 
                         stmt.clearBatch();
                         
-                        String topplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Players` left join `Teams` on Players.playerId = Teams.topPlayerId);";
+                        String topplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Teams` left join `Players` on Players.playerId = Teams.topPlayerId);";
                         
                         stmt.addBatch(topplayerToTeamSQL);
 
@@ -498,7 +498,7 @@ public class Main {
 
                         stmt.clearBatch();
                         
-                        String supplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Players` left join `Teams` on Players.playerId = Teams.supPlayerId);";
+                        String supplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Teams` left join `Players` on Players.playerId = Teams.supPlayerId);";
                         
                         stmt.addBatch(supplayerToTeamSQL);
 
