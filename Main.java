@@ -138,7 +138,7 @@ public class Main {
             e.printStackTrace();
         }
 
-        ApiConfig config = new ApiConfig().setKey("RGAPI-8c101364-a996-419c-8b07-617ab7ef833e");
+        ApiConfig config = new ApiConfig().setKey(insertAPI());
         RiotApi api = new RiotApi(config);
 
         try {
@@ -177,7 +177,9 @@ public class Main {
         
     }
 
-    public static void insertTeams() throws RiotApiException{
+    public static String insertAPI() throws RiotApiException{
+        
+        return "RGAPI-cf959135-0593-405a-846c-07419bbb67eb";
         
     }
     
@@ -191,7 +193,7 @@ public class Main {
             
             Summoner summoner = insertSummoner();
             
-            ApiConfig config = new ApiConfig().setKey("RGAPI-8c101364-a996-419c-8b07-617ab7ef833e");
+            ApiConfig config = new ApiConfig().setKey(insertAPI());
             
             RiotApi api = new RiotApi(config);
             
@@ -209,10 +211,10 @@ public class Main {
 
             if (matchList.getMatches() != null) {
                 for (MatchReference match : matchList.getMatches()) {
-                    if (check < 30 && match.getQueue() == 4) {
+                    if (check < 100 && match.getQueue() == 4) {
 
                         try {
-                            Thread.sleep(3000);
+                            Thread.sleep(10000);
                         } catch (InterruptedException ex) {
                             Thread.currentThread().interrupt();
                         }
@@ -444,8 +446,68 @@ public class Main {
 
                         posConnection.commit();
 
-                        stmt.clearBatch();      
+                        stmt.clearBatch();
+                        
+                        String matchToTeamSQL = "insert ignore into `matchToTeam` (teamId, matchId, enemyTeamId) select team1Id, matchId, team2Id from `AllMatches`;";
 
+                        stmt.addBatch(matchToTeamSQL);
+
+                        stmt.executeBatch();
+
+                        posConnection.commit();
+
+                        stmt.clearBatch();
+                        
+                        String midplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Players` left join `Teams` on Players.playerId = Teams.midPlayerId);";
+                        
+                        stmt.addBatch(midplayerToTeamSQL);
+
+                        stmt.executeBatch();
+
+                        posConnection.commit();
+
+                        stmt.clearBatch();
+                        
+                        String adcplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Players` left join `Teams` on Players.playerId = Teams.adcPlayerId);";
+                        
+                        stmt.addBatch(adcplayerToTeamSQL);
+
+                        stmt.executeBatch();
+
+                        posConnection.commit();
+
+                        stmt.clearBatch();
+                        
+                        String jngplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Players` left join `Teams` on Players.playerId = Teams.jngPlayerId);";
+                        
+                        stmt.addBatch(jngplayerToTeamSQL);
+
+                        stmt.executeBatch();
+
+                        posConnection.commit();
+
+                        stmt.clearBatch();
+                        
+                        String topplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Players` left join `Teams` on Players.playerId = Teams.topPlayerId);";
+                        
+                        stmt.addBatch(topplayerToTeamSQL);
+
+                        stmt.executeBatch();
+
+                        posConnection.commit();
+
+                        stmt.clearBatch();
+                        
+                        String supplayerToTeamSQL = "insert ignore into `PlayerToTeam`(select playerId, teamId from `Players` left join `Teams` on Players.playerId = Teams.supPlayerId);";
+                        
+                        stmt.addBatch(supplayerToTeamSQL);
+
+                        stmt.executeBatch();
+
+                        posConnection.commit();
+
+                        stmt.clearBatch();
+                                                
                         check++;
                     }
                 }
