@@ -179,7 +179,7 @@ public class Main {
 
     public static String insertAPI() throws RiotApiException{
         
-        return "RGAPI-cf959135-0593-405a-846c-07419bbb67eb";
+        return REDACTED API;
         
     }
     
