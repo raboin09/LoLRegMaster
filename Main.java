@@ -71,7 +71,7 @@ public class Main {
         Connection connection = null;
 
         try {
-            connection = DriverManager.getConnection("jdbc:mysql://" + "loldbmysql.crhbfyx7fdgr.us-east-2.rds.amazonaws.com" + ":" + "3306/mysqlloldb", "remoteu", "password");
+            connection = DriverManager.getConnection("jdbc:mysql://" + "loldbmysql.crhbfyx7fdgr.us-east-2.rds.amazonaws.com" + ":" + "3306/mysqlloldb", REDACTED, REDACTED);
         } catch (SQLException e) {
             System.out.println("Connection Failed!:\n" + e.getMessage());
         }
